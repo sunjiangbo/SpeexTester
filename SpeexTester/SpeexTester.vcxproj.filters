@@ -45,7 +45,7 @@
     <ClInclude Include="PCMDefine.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="SpeexEncoder.h">
+    <ClInclude Include="SHSpeexCodec.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>
@@ -62,7 +62,7 @@
     <ClCompile Include="PCMFile.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="SpeexEncoder.cpp">
+    <ClCompile Include="SHSpeexCodec.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

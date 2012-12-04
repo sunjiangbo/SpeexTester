@@ -3,12 +3,14 @@
 
 static PCMFile* pgInstance = NULL;
 
-PCMFile::PCMFile(CString filepath)
-	:m_pFile(NULL)
-	,m_pRIFFHeader(NULL)
-	,m_strFilePath (filepath)
-	,m_bOpen (FALSE)
-	,m_pThread (NULL)
+PCMFile::PCMFile(CString filepath, UINT readSize, BOOL isRawData)
+	:m_pFile			(NULL)
+	,m_pRIFFHeader		(NULL)
+	,m_strFilePath		(filepath)
+	,m_bOpen			(FALSE)
+	,m_pThread			(NULL)
+	,m_uReadSize		(readSize)
+	,m_bRawData			(isRawData)
 {
 	pgInstance = this;
 }
@@ -16,6 +18,11 @@ PCMFile::PCMFile(CString filepath)
 PCMFile::~PCMFile(void)
 {
 	FileClose();
+	
+	if (m_pRIFFHeader) {
+		delete(m_pRIFFHeader);
+		m_pRIFFHeader = NULL;
+	}
 	TRACE(_T("PCMFILE Destroy\n"));
 }
 
@@ -28,6 +35,9 @@ BOOL PCMFile::OpenPCMFile()
 	{
 		m_pFile = new CFile(m_strFilePath, CFile::modeRead);
 		m_bOpen = TRUE;
+
+		if (m_bRawData == FALSE)
+			m_pFile->Seek(44, SEEK_SET);
 	}
 	catch (CFileException* e)
 	{
@@ -39,6 +49,9 @@ BOOL PCMFile::OpenPCMFile()
 
 void PCMFile::ReadHeader(IPCMRead* pRecvier) 
 {
+	if (m_bRawData)
+		return;
+
 	if (m_pRIFFHeader)
 	{
 		pRecvier->ReceiveHeaders(m_pRIFFHeader);
@@ -87,11 +100,7 @@ void PCMFile::FileClose()
 		delete(m_pFile);
 		m_pFile = NULL;
 	}
-
-	if (m_pRIFFHeader) {
-		delete(m_pRIFFHeader);
-		m_pRIFFHeader = NULL;
-	}
+	TRACE(_T("PCM FILE CLOSE\n"));
 }
 
 
@@ -103,7 +112,7 @@ UINT PCMFile::PCMDataReadThread(LPVOID pParam)
 	try
 	{
 		UINT readByte = 0;
-		const UINT CHUNK_SIZE = 160;//m_pRIFFHeader->fmt.ByteRate;
+		const UINT CHUNK_SIZE = pgInstance->m_uReadSize * sizeof(short);
 		BYTE* readBuffer = new BYTE[CHUNK_SIZE];
 
 		BOOL isFinish = FALSE;
@@ -112,6 +121,8 @@ UINT PCMFile::PCMDataReadThread(LPVOID pParam)
 			readByte = pgInstance->m_pFile->Read(readBuffer, CHUNK_SIZE);
 
 			isFinish = (readByte < CHUNK_SIZE);
+			if (readByte == 0)
+				isFinish = TRUE;
 			
 			if (pReceiver) {
 				pReceiver->ReceiveChunkData(readBuffer, readByte, isFinish);
@@ -132,4 +143,10 @@ UINT PCMFile::PCMDataReadThread(LPVOID pParam)
 		pReceiver->ReceiveChunkData(NULL, 0, TRUE);
 	}
 	return 0x77;
+}
+
+UINT PCMFile::GetFileSize()
+{
+	INT len = m_pFile->GetLength();
+	return len;
 }

@@ -17,15 +17,17 @@ public:
 	CFile*			m_pFile;
 	CWinThread*		m_pThread;
 
+	BOOL			m_bRawData;
+	UINT			m_uReadSize;
+
 public:
-	PCMFile(CString filepath);
+	PCMFile(CString filepath, UINT readSize = 160, BOOL isRawData = FALSE);
 	~PCMFile(void);
 
 	BOOL OpenPCMFile();
 	void ReadHeader(IPCMRead* pRecvier);
 	BOOL ReadData(IPCMRead* pRecvier);
-	
-	
+	UINT GetFileSize();
 	
 	static UINT PCMDataReadThread(LPVOID pParam);
 

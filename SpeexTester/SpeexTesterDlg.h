@@ -6,8 +6,10 @@
 #include "afxwin.h"
 #include "afxcmn.h"
 #include "PCMFile.h"
+#include "SHSpeexCodec.h"
 
-// CSpeexTesterDlg 대화 상자
+#define SPEEX_BUFFER_SIZE		2048
+
 class CSpeexTesterDlg : public CDialogEx, IPCMRead
 {
 // 생성입니다.
@@ -34,20 +36,46 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 private:
-	CStatic		m_STCInputPcm;
-	CListCtrl	m_ListPCMInfo;
-	CString		m_StrInputPcm;
-	PCMFile*	m_pPCMFile;
+	CString			m_PCMInputPath;
+	UINT			m_ProgPos;
+	
+	PCMFile*		m_pPCMFile;
+	SHSpeexCodec*	m_pSpeexCodec;
+	CFile*			m_pEncSaveFile;
+	CFile*			m_pDecSaveFile;
+
+	CButton			m_BtnOpen;
+	CButton			m_BtnTest;
+	CComboBox		m_CombFileType;
+	CComboBox		m_CombSampleRate;
+	CComboBox		m_CombQuality;
+	CStatic			m_STCInputPcm;
+	CProgressCtrl	m_Progress;
+	CStatic			m_STCState;
+	CStatic			m_StcEncBandWidth;
+
+	UINT			m_nEncSum;
+	UINT			m_nPCMDuration;
+	UINT			m_nEncBandWidth;
 
 public:
 	virtual void ReceiveChunkData(BYTE* buffer, UINT count, BOOL isFinish);
 	virtual void ReceiveHeaders(PPCM_HEADERS headers);
+	static UINT DecodeFileWriteThread(LPVOID pParma);
 
 private:
 	void ConvertUniCode(char* str, int len, TCHAR* OutputStr);
+	void CreateSpeexCodec();
+	void InitControls();
+	void InitProgress();
+
+	//Test
+	void foo(char* file);
+
+
 
 public:
 	afx_msg void OnBnClickedBtnPcmOpen();
-	
+	afx_msg void OnBnClickedBtnEncodeDecode();
 	
 };

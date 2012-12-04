@@ -1,4 +1,4 @@
-
+CreateSpeexCodec
 // SpeexTesterDlg.cpp : 구현 파일
 //
 
@@ -7,6 +7,7 @@
 #include "SpeexTesterDlg.h"
 #include "afxdialogex.h"
 
+#include <speex/speex.h>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -47,6 +48,10 @@ END_MESSAGE_MAP()
 CSpeexTesterDlg::CSpeexTesterDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(CSpeexTesterDlg::IDD, pParent)
 	, m_pPCMFile (NULL)
+	, m_pEncSaveFile (NULL)
+	, m_pDecSaveFile (NULL)
+	, m_pSpeexCodec ( NULL)
+	, m_ProgPos (0)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -56,7 +61,14 @@ void CSpeexTesterDlg::DoDataExchange(CDataExchange* pDX)
 	CDialogEx::DoDataExchange(pDX);
 
 	DDX_Control(pDX, IDC_LBL_INPUT, m_STCInputPcm);
-	DDX_Control(pDX, IDC_LIST_PCMINFO, m_ListPCMInfo);
+	DDX_Control(pDX, IDC_PROGRESS, m_Progress);
+	DDX_Control(pDX, IDC_STC_STATE, m_STCState);
+	DDX_Control(pDX, IDC_BTN_PCM_OPEN, m_BtnOpen);
+	DDX_Control(pDX, IDC_BTN_ENCODE, m_BtnTest);
+	DDX_Control(pDX, IDC_COMB_TYPE, m_CombFileType);
+	DDX_Control(pDX, IDC_COMB_SAMPLERATE, m_CombSampleRate);
+	DDX_Control(pDX, IDC_COMB_QUALITY, m_CombQuality);
+	DDX_Control(pDX, IDC_STC_ENCBANDWIDTH, m_StcEncBandWidth);
 }
 
 BEGIN_MESSAGE_MAP(CSpeexTesterDlg, CDialogEx)
@@ -64,6 +76,7 @@ BEGIN_MESSAGE_MAP(CSpeexTesterDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BTN_PCM_OPEN, &CSpeexTesterDlg::OnBnClickedBtnPcmOpen)
+	ON_BN_CLICKED(IDC_BTN_ENCODE, &CSpeexTesterDlg::OnBnClickedBtnEncodeDecode)
 END_MESSAGE_MAP()
 
 
@@ -92,12 +105,8 @@ BOOL CSpeexTesterDlg::OnInitDialog()
 	SetIcon(m_hIcon, TRUE);
 	SetIcon(m_hIcon, FALSE);
 
-	
-	//Init
-	m_STCInputPcm.SetWindowTextW(_T("선택된 파일 없음."));
-	m_ListPCMInfo.SetExtendedStyle(LVS_EX_GRIDLINES);
-	m_ListPCMInfo.InsertColumn(0, _T("필드"), LVCFMT_LEFT, 100, -1);
-	m_ListPCMInfo.InsertColumn(1, _T("값"), LVCFMT_CENTER, 200, -1);
+
+	InitControls();
 
 	return TRUE;  
 }
@@ -154,106 +163,6 @@ BOOL CSpeexTesterDlg::PreTranslateMessage(MSG* pMsg)
 	return CDialog::PreTranslateMessage(pMsg);
 }
 
-void CSpeexTesterDlg::OnBnClickedBtnPcmOpen()
-{
-	TCHAR szFilter[] = _T("PCM (*.wav)|*.wav||");
-	CFileDialog dlg(TRUE, NULL, NULL, OFN_HIDEREADONLY, szFilter);
-	
-	if(IDOK == dlg.DoModal()) {
-
-		m_StrInputPcm.SetString(dlg.GetPathName());
-		m_STCInputPcm.SetWindowText(m_StrInputPcm);
-
-		if (m_pPCMFile) 
-		{
-			delete(m_pPCMFile);
-			m_pPCMFile = NULL;
-		}
-		m_pPCMFile = new PCMFile(m_StrInputPcm);
-		if (m_pPCMFile->OpenPCMFile() == FALSE) 
-		{
-			AfxMessageBox(_T("PCM 파일 열기 실패."));
-		}
-		else 
-		{
-			m_pPCMFile->ReadHeader(this);
-			m_pPCMFile->ReadData(this);
-		}
-	} 	
-}
-
-
-static int ccc = 0;
-void CSpeexTesterDlg::ReceiveChunkData(BYTE* buffer, UINT count, BOOL isFinish)
-{
-	TRACE(_T("RECEIVE DATA : %d : %d\n"), count, ccc++);
-}
-
-void CSpeexTesterDlg::ReceiveHeaders(PPCM_HEADERS pHeaderData) 
-{
-	m_ListPCMInfo.DeleteAllItems();
-
-
-	TCHAR unicodeConvert[256] = {0,};
-	TCHAR infoBuffer[256] = {0,};
-	int row = 0;
-	CString valueStr;
-
-	
-	ConvertUniCode((char *)pHeaderData->riff.chunkID, 4, unicodeConvert);
-	m_ListPCMInfo.InsertItem(row, _T("Chunk ID"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, unicodeConvert, 0, 0, 0, NULL );
-
-	valueStr.Format(_T("%d"), pHeaderData->riff.chunckSize);
-	m_ListPCMInfo.InsertItem(row, _T("Chunk Size"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, valueStr, 0, 0, 0, NULL );
-	
-	ConvertUniCode((char *)pHeaderData->riff.format, 4, unicodeConvert);
-	m_ListPCMInfo.InsertItem(row, _T("Format"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, unicodeConvert, 0, 0, 0, NULL );
-
-	ConvertUniCode((char *)pHeaderData->fmt.subChunk1ID, 4, unicodeConvert);
-	m_ListPCMInfo.InsertItem(row, _T("SubChunk1 ID"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, unicodeConvert, 0, 0, 0, NULL );
-
-	valueStr.Format(_T("%d"), pHeaderData->fmt.subChunk1Size);
-	m_ListPCMInfo.InsertItem(row, _T("SubChunk1 Size"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, valueStr, 0, 0, 0, NULL );
-
-	valueStr.Format(_T("%d"), pHeaderData->fmt.audioFormat);
-	m_ListPCMInfo.InsertItem(row, _T("Audio Format"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, valueStr, 0, 0, 0, NULL );
-
-	valueStr.Format(_T("%d"), pHeaderData->fmt.numOfChannels);
-	m_ListPCMInfo.InsertItem(row, _T("Channels"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, valueStr, 0, 0, 0, NULL );
-
-	valueStr.Format(_T("%d"), pHeaderData->fmt.sampleRate);
-	m_ListPCMInfo.InsertItem(row, _T("SmapleRate"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, valueStr, 0, 0, 0, NULL );
-
-	valueStr.Format(_T("%d"), pHeaderData->fmt.ByteRate);
-	m_ListPCMInfo.InsertItem(row, _T("ByteRate"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, valueStr, 0, 0, 0, NULL );
-
-	valueStr.Format(_T("%d"), pHeaderData->fmt.BlockAlign);
-	m_ListPCMInfo.InsertItem(row, _T("Block Align"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, valueStr, 0, 0, 0, NULL );
-
-	valueStr.Format(_T("%d"), pHeaderData->fmt.BitsPerSmaple);
-	m_ListPCMInfo.InsertItem(row, _T("Bit Per Sample"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, valueStr, 0, 0, 0, NULL );
-
-	ConvertUniCode((char *)pHeaderData->data.subChunk2ID, 4, unicodeConvert);
-	m_ListPCMInfo.InsertItem(row, _T("SubChunk2 ID"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, unicodeConvert, 0, 0, 0, NULL );
-
-	valueStr.Format(_T("%d"), pHeaderData->data.subChunk2Size);
-	m_ListPCMInfo.InsertItem(row, _T("SubChunk2 Size"));
-	m_ListPCMInfo.SetItem(row++, 1, LVIF_TEXT, valueStr, 0, 0, 0, NULL );
-}
-
-
 void CSpeexTesterDlg::ConvertUniCode(char* str, int len, TCHAR* OutputStr)
 {
 	wchar_t strUnicode[256] = {0,};
@@ -264,3 +173,350 @@ void CSpeexTesterDlg::ConvertUniCode(char* str, int len, TCHAR* OutputStr)
 
 	wsprintf(OutputStr, _T("%s\0"), strUnicode);
 }
+
+void CSpeexTesterDlg::CreateSpeexCodec()
+{
+	if (m_pSpeexCodec)
+	{
+		delete m_pSpeexCodec;
+		m_pSpeexCodec = NULL;
+	}
+
+	INT bandSel = m_CombSampleRate.GetCurSel();
+	if (bandSel == 0)
+		bandSel = SPEEX_NARROW;
+	else if (bandSel == 1)
+		bandSel = SPEEX_WIDE;
+	else if (bandSel == 2)
+		bandSel = SPEEX_ULTRAWIDE;
+
+	INT quality = m_CombQuality.GetCurSel();
+	m_pSpeexCodec = new SHSpeexCodec(bandSel, quality + 1);
+}
+
+void CSpeexTesterDlg::InitControls()
+{
+	m_Progress.SetRange(0, 100);
+	m_Progress.SetPos(0);
+	m_STCState.SetWindowTextW(_T("대기중."));
+	m_BtnTest.EnableWindow(FALSE);
+
+
+	m_CombFileType.AddString(_T("WAVE"));
+	m_CombFileType.AddString(_T("RAW"));
+	m_CombFileType.SetCurSel(0);
+
+	m_CombSampleRate.AddString(_T("8K (Narrow Band)"));
+	m_CombSampleRate.AddString(_T("16K (Wide Band)"));
+	m_CombSampleRate.AddString(_T("32K (Ultra Wide Band)"));
+	m_CombSampleRate.SetCurSel(1);
+
+	m_CombQuality.AddString(_T("1 (High)"));
+		m_CombQuality.AddString(_T("2"));
+	m_CombQuality.AddString(_T("3"));
+	m_CombQuality.AddString(_T("4"));
+	m_CombQuality.AddString(_T("5"));
+	m_CombQuality.AddString(_T("6"));
+	m_CombQuality.AddString(_T("7"));
+	m_CombQuality.AddString(_T("8"));
+	m_CombQuality.AddString(_T("9"));
+	m_CombQuality.AddString(_T("10 (Low)"));
+	m_CombQuality.SetCurSel(9);
+}
+
+
+void CSpeexTesterDlg::InitProgress()
+{
+	UINT nFilesize = m_pPCMFile->GetFileSize();
+	m_nPCMDuration = nFilesize / 100 / 320;
+
+	m_ProgPos = 0;
+	int total = m_pPCMFile->GetFileSize() / m_pSpeexCodec->GetFrameSize();
+	m_Progress.SetRange32(0, total);
+	m_Progress.SetPos(0);
+}
+
+
+
+void CSpeexTesterDlg::OnBnClickedBtnPcmOpen()
+{
+	TCHAR szFilter[] = _T("ALL (*.*) | *.*||");
+	CFileDialog dlg(TRUE, NULL, NULL, OFN_HIDEREADONLY, szFilter);
+
+	if(IDOK == dlg.DoModal()) {
+
+		m_PCMInputPath.SetString(dlg.GetPathName());
+		m_STCInputPcm.SetWindowText(m_PCMInputPath);
+
+		if (m_pPCMFile) 
+		{
+			delete(m_pPCMFile);
+			m_pPCMFile = NULL;
+		}
+
+		INT band = m_CombSampleRate.GetCurSel();
+		if (band == 0)
+			band = 160;
+		else if (band == 1)
+			band = 320;
+		else if (band == 2)
+			band = 640;
+
+		m_nPCMDuration = 0;
+		m_pPCMFile = new PCMFile(m_PCMInputPath, band, FALSE);
+		if (m_pPCMFile->OpenPCMFile() == FALSE) 
+		{
+			AfxMessageBox(_T("File Open Failed."));
+		}
+		else 
+		{
+			CreateSpeexCodec();
+ 			m_BtnTest.EnableWindow(TRUE);
+		}
+	} 	
+}
+
+
+void CSpeexTesterDlg::OnBnClickedBtnEncodeDecode()
+{
+	m_nEncSum = m_nEncBandWidth = 0;
+	m_BtnOpen.EnableWindow(FALSE);
+	m_BtnTest.EnableWindow(FALSE);
+
+	if (m_pEncSaveFile) 
+	{
+		m_pEncSaveFile->Close();
+		delete(m_pEncSaveFile);
+		m_pEncSaveFile = NULL;
+	}
+
+	CString savePath = m_PCMInputPath;
+	savePath = savePath.Left(savePath.GetLength() - 3);
+	savePath.Append(_T("spxenc"));
+	m_pEncSaveFile = new CFile(savePath, CFile::modeCreate | CFile::modeReadWrite | CFile::typeBinary);
+
+	m_pSpeexCodec->InitEncoder();
+
+	
+	InitProgress();
+	m_pPCMFile->ReadData(this);
+}
+
+
+void CSpeexTesterDlg::ReceiveChunkData(BYTE* buffer, UINT count, BOOL isFinish)
+{
+	if (isFinish) 
+	{
+		m_nEncBandWidth = m_nEncSum / 100 / m_nPCMDuration;
+		CString band;
+		band.Format(_T("Enc BandWidth : %d bps"), m_nEncBandWidth);
+		m_StcEncBandWidth.SetWindowTextW(band);
+
+		m_pEncSaveFile->Close();
+		delete m_pEncSaveFile;
+		m_pEncSaveFile = NULL;
+
+		m_STCState.SetWindowTextW(_T("Encoding Finish."));
+
+		if (m_pDecSaveFile) 
+		{
+			m_pDecSaveFile->Close();
+			delete(m_pDecSaveFile);
+			m_pDecSaveFile = NULL;
+		}
+		::AfxBeginThread(DecodeFileWriteThread, (LPVOID)this);
+		return;
+	}
+
+	LPBYTE output = NULL;
+	int len = m_pSpeexCodec->Encode((short *)buffer, count, &output);
+	m_nEncSum += len;
+
+	m_pEncSaveFile->Write(&len , sizeof(int));
+	m_pEncSaveFile->Write(output, len);
+
+	m_Progress.SetPos(m_ProgPos++);
+
+	TCHAR msg[256];
+	wsprintf(msg, _T("Encoding : %d byte\0"), len);
+	m_STCState.SetWindowTextW(msg);
+}
+
+void CSpeexTesterDlg::ReceiveHeaders(PPCM_HEADERS pHeaderData) 
+{
+}
+
+
+UINT CSpeexTesterDlg::DecodeFileWriteThread(LPVOID pParma)
+{
+	
+	CSpeexTesterDlg* pThis = (CSpeexTesterDlg *)pParma;
+
+	CString encFilePath = pThis->m_PCMInputPath;
+	encFilePath= encFilePath.Left(encFilePath.GetLength() - 3);
+	encFilePath.Append(_T("spxenc"));
+
+	CString savePath = pThis->m_PCMInputPath;
+	savePath = savePath.Left(savePath.GetLength() - 3);
+	savePath.Append(_T("spxdec"));
+
+	pThis->m_pSpeexCodec->InitDecoder();
+	SHSpeexCodec* codec = pThis->m_pSpeexCodec;
+
+	SHORT* pOutputBuffer = new SHORT[codec->GetFrameSize()];
+	PBYTE pReadBuffer = new BYTE[codec->GetFrameSize()];
+	try
+	{
+		CFile encFile(encFilePath, CFile::modeRead);
+		pThis->m_pDecSaveFile = new CFile(savePath, CFile::modeCreate | CFile::modeReadWrite | CFile::typeBinary);
+
+		int readByte = 0;
+		BOOL isFinish = FALSE;
+		TCHAR msg[256];
+		while (TRUE) 
+		{
+			int encLen = 0;
+			readByte = encFile.Read(&encLen, sizeof(int));
+			readByte = encFile.Read(pReadBuffer , encLen);
+
+			wsprintf(msg, _T("Decoding : %d : %d"), readByte, encLen);
+			pThis->m_STCState.SetWindowText(msg);
+
+			isFinish = (readByte < encLen);
+			if (readByte == 0)
+				break;
+
+			int len = codec->Decode(pReadBuffer, encLen, pOutputBuffer );
+			pThis->m_pDecSaveFile->Write(pOutputBuffer, sizeof(SHORT) * codec->GetFrameSize());
+
+			pThis->m_Progress.SetPos(pThis->m_ProgPos++);
+
+			if (isFinish) 
+			{
+				break;
+			}
+		}
+		encFile.Close();
+		pThis->m_pDecSaveFile->Close();
+		delete pThis->m_pDecSaveFile;
+		pThis->m_pDecSaveFile = NULL;
+
+		delete [] pReadBuffer;
+		delete [] pOutputBuffer;
+
+		pThis->m_STCState.SetWindowText(_T("Decode Finish."));
+		pThis->m_BtnOpen.EnableWindow(TRUE);
+
+		delete pThis->m_pPCMFile;
+		pThis->m_pPCMFile = NULL;
+
+		delete pThis->m_pSpeexCodec;
+		pThis->m_pSpeexCodec = NULL;
+		
+	}
+	catch (CFileException* e)
+	{
+		TRACE(_T("DEC ERROR\n"));
+	} 
+	
+	return 0x78;
+}
+
+/*
+#define FRAME_SIZE 160
+void CSpeexTesterDlg::foo(char* file) 
+{
+	const SpeexMode *pSpeex_uwb_mode = speex_lib_get_mode (SPEEX_MODEID_WB);
+	const SpeexMode *pSpeex_wb_mode = speex_lib_get_mode (SPEEX_MODEID_WB);
+	const SpeexMode *pSpeex_nb_mode = speex_lib_get_mode (SPEEX_MODEID_NB);
+
+	char *inFile;
+	FILE *fin, *fout;
+	short in[FRAME_SIZE];
+	float input[FRAME_SIZE];
+	char cbits[200];
+	int nbBytes;
+	
+	void *state;
+	SpeexBits bits;
+	int i, tmp;
+	
+	state = speex_encoder_init(pSpeex_wb_mode);
+	tmp=10;
+	speex_encoder_ctl(state, SPEEX_SET_QUALITY, &tmp);
+
+
+	inFile = "./wb_male.wav";
+	fin = fopen(inFile, "rb");
+	fseek(fin, 0, SEEK_SET);
+	fseek(fin, 44, SEEK_SET);
+	fout = fopen("./out.spx", "wb");
+		
+	
+	speex_bits_init(&bits);
+	while (1)
+	{
+		
+		int read = fread(in, sizeof(short), FRAME_SIZE, fin);
+		if (feof(fin))
+			break;
+		
+		for (i=0;i<FRAME_SIZE;i++)
+			input[i]=in[i];
+		
+		speex_bits_reset(&bits);
+		speex_encode(state, input, &bits);
+		nbBytes = speex_bits_write(&bits, cbits, 200);
+		printf("ENC : %d", nbBytes);
+		fwrite(&nbBytes, sizeof(int), 1, fout);
+		fwrite(cbits, 1, nbBytes, fout);
+		
+	}	
+	speex_encoder_destroy(state);
+	speex_bits_destroy(&bits);
+	fclose(fin);
+	fclose(fout);
+	
+
+
+	short out[FRAME_SIZE];
+	float output[FRAME_SIZE];
+	
+	state = speex_decoder_init(pSpeex_wb_mode);
+	tmp=1;
+	speex_decoder_ctl(state, SPEEX_SET_ENH, &tmp);
+
+	
+	fout = fopen("./111.dex", "wb");
+	fin = fopen("./wb_male.spxenc", "rb");
+  
+   speex_bits_init(&bits);
+   while (1)
+   {
+      fread(&nbBytes, sizeof(int), 1, fin);
+      fprintf (stderr, "nbBytes: %d\n", nbBytes);
+      if (feof(fin))
+         break;
+
+	  TRACE(_T("______________READ :%d"), nbBytes);
+      
+  
+      fread(cbits, 1, nbBytes, fin);
+  
+      speex_bits_read_from(&bits, cbits, nbBytes); 
+      speex_decode(state, &bits, output);
+
+     
+      for (i=0;i<FRAME_SIZE;i++)
+         out[i]=output[i];
+
+   
+      fwrite(out, sizeof(short), FRAME_SIZE, fout);
+   }
+  
+   speex_decoder_destroy(state);
+   speex_bits_destroy(&bits);
+   fclose(fout);
+   fclose(fin);
+}
+*/
