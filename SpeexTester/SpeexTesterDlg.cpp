@@ -254,6 +254,8 @@ void CSpeexTesterDlg::OnBnClickedBtnPcmOpen()
 			m_pPCMFile = NULL;
 		}
 
+		int nRaw = m_CombFileType.GetCurSel();
+
 		INT band = m_CombSampleRate.GetCurSel();
 		if (band == 0)
 			band = 160;
@@ -263,7 +265,7 @@ void CSpeexTesterDlg::OnBnClickedBtnPcmOpen()
 			band = 640;
 
 		m_nPCMDuration = 0;
-		m_pPCMFile = new PCMFile(m_PCMInputPath, band, FALSE);
+		m_pPCMFile = new PCMFile(m_PCMInputPath, band, nRaw == 1 ? TRUE : FALSE);
 		if (m_pPCMFile->OpenPCMFile() == FALSE) 
 		{
 			AfxMessageBox(_T("File Open Failed."));

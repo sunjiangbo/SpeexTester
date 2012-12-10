@@ -28,9 +28,10 @@ PCMFile::~PCMFile(void)
 
 BOOL PCMFile::OpenPCMFile() 
 {
+	/*
 	if (ValidExtension(m_strFilePath) == FALSE) 
 		return FALSE;
-
+	*/
 	try
 	{
 		m_pFile = new CFile(m_strFilePath, CFile::modeRead);
@@ -73,11 +74,13 @@ void PCMFile::ReadHeader(IPCMRead* pRecvier)
 
 BOOL PCMFile::ReadData(IPCMRead* pRecvier)
 {
+	/*
 	if (ValidExtension(m_strFilePath) == FALSE) 
 	{
 		pRecvier->ReceiveChunkData(NULL, 0, TRUE);
 		return FALSE;
 	}
+	*/
 	m_pThread= ::AfxBeginThread(PCMDataReadThread, (LPVOID)pRecvier);
 	return TRUE;
 }
